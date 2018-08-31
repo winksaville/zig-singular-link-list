@@ -20,19 +20,17 @@ pub const SingularLinkList = struct {
         const Self = this;
 
         pSll: *SingularLinkList,
-        eol: Link,
-        pCur: *Link,
-        pHead: *Link,
+        pCur: ?*Link,
+        pHead: ?*Link,
         doneFlag: bool,
 
-        fn init(pSelf: *NonMutatableIterator, pSll: *SingularLinkList) *Link {
+        fn init(pSelf: *NonMutatableIterator, pSll: *SingularLinkList) ?*Link {
             pSelf.pSll = pSll;
-            pSelf.eol = Link { .ptr = &pSelf.eol, };
 
             if (pSll.tail.ptr == null) {
-                pSelf.pCur = &pSelf.eol;
-                pSelf.pHead = &pSelf.eol;
-                pSelf.setDone();
+                pSelf.pHead = null;
+                pSelf.pCur = null;
+                pSelf.doneFlag = true;
             } else {
                 pSelf.pHead = pSll.tail.ptr.?.ptr orelse unreachable;
                 pSelf.pCur = pSelf.pHead;
@@ -42,19 +40,15 @@ pub const SingularLinkList = struct {
             return pSelf.pCur;
         }
 
-        fn setDone(pSelf: *NonMutatableIterator) void {
-            pSelf.doneFlag = true;
-        }
-
         fn done(pSelf: *NonMutatableIterator) bool {
             return pSelf.doneFlag;
         }
 
-        fn next(pSelf: *NonMutatableIterator) *Link {
-            var pNext = pSelf.pCur.ptr.?;
+        fn next(pSelf: *NonMutatableIterator) ?*Link {
+            var pNext = pSelf.pCur.?.ptr.?;
             if (pNext == pSelf.pHead) {
                 // If back to head we're done
-                pSelf.setDone();
+                pSelf.doneFlag = true;
             }
             pSelf.pCur = pNext;
             return pNext;
@@ -176,10 +170,10 @@ test "Sll.one.element" {
 
     // Test iterator over a one element list
     var iter: Sll.NonMutatableIterator = undefined;
-    var pCur = iter.init(&sll);
+    var pCur: ?*Link = iter.init(&sll);
     idx = 0;
     while (!iter.done()) : (pCur = iter.next()) {
-        var pNode = Node.linkToNode(pCur);
+        var pNode = Node.linkToNode(pCur orelse unreachable);
         warn("Sll.one.element: iter pNode.data={}\n", pNode.data);
         assert(pNode.data == idx + 1);
         idx += 1;
@@ -214,7 +208,7 @@ test "Sll.two.elements" {
     var pCur = iter.init(&sll);
     idx = 0;
     while (!iter.done()) : (pCur = iter.next()) {
-        var pNode = Node.linkToNode(pCur);
+        var pNode = Node.linkToNode(pCur orelse unreachable);
         warn("Sll.two.element: iter pNode.data={}\n", pNode.data);
         assert(pNode.data == idx + 1);
         idx += 1;
@@ -251,7 +245,7 @@ test "Sll.three.elements" {
     var pCur = iter.init(&sll);
     idx = 0;
     while (!iter.done()) : (pCur = iter.next()) {
-        var pNode = Node.linkToNode(pCur);
+        var pNode = Node.linkToNode(pCur orelse unreachable);
         warn("Sll.two.element: iter pNode.data={}\n", pNode.data);
         assert(pNode.data == idx + 1);
         idx += 1;
@@ -311,16 +305,6 @@ test "SllBm1000" {
                 idx += 1;
             }
         }
-        fn benchmarkIter(pSelf: *Self) void {
-            var iter: Sll.NonMutatableIterator = undefined;
-            var pCur = iter.init(&pSelf.sll);
-            var idx: usize = 0;
-            while (!iter.done()) : (pCur = iter.next()) {
-                var pNode = Node.linkToNode(pCur);
-                assert(pNode.data == idx + 1);
-                idx += 1;
-            }
-        }
     };
 
     var pAllocator = std.debug.global_allocator;
@@ -374,7 +358,7 @@ test "SllBm1000.iter" {
             var pCur = iter.init(&pSelf.sll);
             var idx: usize = 0;
             while (!iter.done()) : (pCur = iter.next()) {
-                var pNode = Node.linkToNode(pCur);
+                var pNode = Node.linkToNode(pCur orelse unreachable);
                 assert(pNode.data == idx + 1);
                 idx += 1;
             }
