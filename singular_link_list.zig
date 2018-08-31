@@ -14,6 +14,53 @@ pub const SingularLinkList = struct {
         };
     }
 
+    // Assumes the list is NOT mutated while being traversed
+    // for maximum performance
+    const NonMutatableIterator = struct {
+        const Self = this;
+
+        pSll: *SingularLinkList,
+        eol: Link,
+        pCur: *Link,
+        pHead: *Link,
+        doneFlag: bool,
+
+        fn init(pSelf: *NonMutatableIterator, pSll: *SingularLinkList) *Link {
+            pSelf.pSll = pSll;
+            pSelf.eol = Link { .ptr = &pSelf.eol, };
+
+            if (pSll.tail.ptr == null) {
+                pSelf.pCur = &pSelf.eol;
+                pSelf.pHead = &pSelf.eol;
+                pSelf.setDone();
+            } else {
+                pSelf.pHead = pSll.tail.ptr.?.ptr orelse unreachable;
+                pSelf.pCur = pSelf.pHead;
+                pSelf.doneFlag = false;
+            }
+
+            return pSelf.pCur;
+        }
+
+        fn setDone(pSelf: *NonMutatableIterator) void {
+            pSelf.doneFlag = true;
+        }
+
+        fn done(pSelf: *NonMutatableIterator) bool {
+            return pSelf.doneFlag;
+        }
+
+        fn next(pSelf: *NonMutatableIterator) *Link {
+            var pNext = pSelf.pCur.ptr.?;
+            if (pNext == pSelf.pHead) {
+                // If back to head we're done
+                pSelf.setDone();
+            }
+            pSelf.pCur = pNext;
+            return pNext;
+        }
+    };
+
     fn next(pSelf: *Self, pPrev: ?*Link) ?*Link {
         if (pSelf.tail.ptr == null) return null; // empty list
         if (pPrev == null) return pSelf.tail.ptr.?.ptr; // asking for head
@@ -92,6 +139,21 @@ test "Sll.empty" {
     assert(idx == 0);
 }
 
+test "Sll.empty.iterator" {
+    var sll = Sll.init();
+    assert(sll.next(null) == null);
+    var node: Link = undefined;
+    assert(sll.next(&node) == null);
+
+    // Test we can loop over an empty SSL
+    var iter: Sll.NonMutatableIterator = undefined;
+    //var pCur = Sll.NonMutatableIterator.init(&iter, &sll);
+    var pCur = iter.init(&sll);
+    while (!iter.done()) : (pCur = iter.next()) {
+        assertError("Expecting the link list to be empty", error.ExpectingEmpty);
+    }
+}
+
 test "Sll.one.element" {
     // Initialize
     var sll = Sll.init();
@@ -108,6 +170,18 @@ test "Sll.one.element" {
         var pNode = Node.linkToNode(pLink);
         assert(pNode.data == idx + 1);
         p = pLink;
+        idx += 1;
+    }
+    assert(idx == 1);
+
+    // Test iterator over a one element list
+    var iter: Sll.NonMutatableIterator = undefined;
+    var pCur = iter.init(&sll);
+    idx = 0;
+    while (!iter.done()) : (pCur = iter.next()) {
+        var pNode = Node.linkToNode(pCur);
+        warn("Sll.one.element: iter pNode.data={}\n", pNode.data);
+        assert(pNode.data == idx + 1);
         idx += 1;
     }
     assert(idx == 1);
@@ -134,6 +208,18 @@ test "Sll.two.elements" {
         idx += 1;
     }
     assert(idx == 2);
+
+    // Test iterator over a two element list
+    var iter: Sll.NonMutatableIterator = undefined;
+    var pCur = iter.init(&sll);
+    idx = 0;
+    while (!iter.done()) : (pCur = iter.next()) {
+        var pNode = Node.linkToNode(pCur);
+        warn("Sll.two.element: iter pNode.data={}\n", pNode.data);
+        assert(pNode.data == idx + 1);
+        idx += 1;
+    }
+    assert(idx == 2);
 }
 
 test "Sll.three.elements" {
@@ -156,6 +242,18 @@ test "Sll.three.elements" {
         var pNode = Node.linkToNode(pLink);
         assert(pNode.data == idx + 1);
         p = pLink;
+        idx += 1;
+    }
+    assert(idx == 3);
+
+    // Test iterator over a three element list
+    var iter: Sll.NonMutatableIterator = undefined;
+    var pCur = iter.init(&sll);
+    idx = 0;
+    while (!iter.done()) : (pCur = iter.next()) {
+        var pNode = Node.linkToNode(pCur);
+        warn("Sll.two.element: iter pNode.data={}\n", pNode.data);
+        assert(pNode.data == idx + 1);
         idx += 1;
     }
     assert(idx == 3);
@@ -213,10 +311,78 @@ test "SllBm1000" {
                 idx += 1;
             }
         }
+        fn benchmarkIter(pSelf: *Self) void {
+            var iter: Sll.NonMutatableIterator = undefined;
+            var pCur = iter.init(&pSelf.sll);
+            var idx: usize = 0;
+            while (!iter.done()) : (pCur = iter.next()) {
+                var pNode = Node.linkToNode(pCur);
+                assert(pNode.data == idx + 1);
+                idx += 1;
+            }
+        }
     };
 
     var pAllocator = std.debug.global_allocator;
     var bm = Benchmark.init("SllBM1000", pAllocator);
+    bm.repetitions = 10;
+
+    var sllBm1000 = try SllBm1000.init(pAllocator);
+    defer sllBm1000.deinit();
+
+    warn("\n");
+    try bm.run(&sllBm1000);
+}
+
+test "SllBm1000.iter" {
+    const SllBm1000 = struct {
+        const Self = this;
+
+        pAllocator: *Allocator,
+        sll: Sll,
+        list: []Node,
+
+        fn init(pAllocator: *Allocator) !Self {
+            var bm: Self = undefined;
+
+            bm.pAllocator = pAllocator;
+            bm.sll = Sll.init();
+            bm.list = try pAllocator.alloc(Node, 1000);
+            for (bm.list) |_, i| {
+                var node = &bm.list[i];
+                node.initPtr(i + 1);
+                bm.sll.append(&node.link);
+            }
+
+            var p: ?*Link = null;
+            var idx: usize = 0;
+            while (bm.sll.next(p)) |pLink| {
+                var pNode = Node.linkToNode(pLink);
+                assert(pNode.data == idx + 1);
+                p = pLink;
+                idx += 1;
+            }
+            return bm;
+        }
+
+        fn deinit(pSelf: *Self) void {
+            pSelf.pAllocator.free(pSelf.list);
+        }
+
+        fn benchmark(pSelf: *Self) void {
+            var iter: Sll.NonMutatableIterator = undefined;
+            var pCur = iter.init(&pSelf.sll);
+            var idx: usize = 0;
+            while (!iter.done()) : (pCur = iter.next()) {
+                var pNode = Node.linkToNode(pCur);
+                assert(pNode.data == idx + 1);
+                idx += 1;
+            }
+        }
+    };
+
+    var pAllocator = std.debug.global_allocator;
+    var bm = Benchmark.init("SllBM1000.iter", pAllocator);
     bm.repetitions = 10;
 
     var sllBm1000 = try SllBm1000.init(pAllocator);
