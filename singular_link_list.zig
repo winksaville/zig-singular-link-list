@@ -3,7 +3,7 @@ pub const Link = struct {
 };
 
 pub const SingularLinkList = struct {
-    const Self = this;
+    const Self = @This();
 
     // tail.ptr.?.ptr is head
     tail: Link,
@@ -17,7 +17,7 @@ pub const SingularLinkList = struct {
     // Assumes the list is NOT mutated while being traversed
     // for maximum performance
     const NonMutatableIterator = struct {
-        const Self = this;
+        const Self = @This();
 
         pSll: *SingularLinkList,
         pCur: ?*Link,
@@ -90,7 +90,7 @@ const Allocator = mem.Allocator;
 const Sll = SingularLinkList;
 
 const Node = struct {
-    const Self = this;
+    const Self = @This();
 
     link: Link,
     data: usize,
@@ -261,7 +261,7 @@ fn no_opt() void {
 
 test "SllBm1000" {
     const SllBm1000 = struct {
-        const Self = this;
+        const Self = @This();
 
         pAllocator: *Allocator,
         sll: Sll,
@@ -320,7 +320,7 @@ test "SllBm1000" {
 
 test "SllBm1000.iter" {
     const SllBm1000 = struct {
-        const Self = this;
+        const Self = @This();
 
         pAllocator: *Allocator,
         sll: Sll,
